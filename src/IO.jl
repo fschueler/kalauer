@@ -64,11 +64,11 @@ type ColumnSchema{T}
   unique::Bool
 end
 
-createColumnSchema{T}(name::AbstractString, dtype::T, nullable, unique) = return ColumnSchema(name, dtype, nullable, unique)
+ColumnSchema{T}(name::AbstractString, dtype::T, nullable, unique) = return ColumnSchema(name, dtype, nullable, unique)
 
-createColumnSchema{T}(name::AbstractString, dtype::T) = createColumnSchema(name, dtype, false, false)
+ColumnSchema{T}(name::AbstractString, dtype::T) = ColumnSchema(name, dtype, false, false)
 
-createColumnSchema{T}(name::AbstractString, dtype::T, nullable) = createColumnSchema(name, dtype, nullable, false)
+ColumnSchema{T}(name::AbstractString, dtype::T, nullable) = ColumnSchema(name, dtype, nullable, false)
 
 # Table Schemas
 type TableSchema
@@ -77,7 +77,7 @@ type TableSchema
   columns_by_name::Dict{AbstractString, (ColumnSchema, Integer)}
 end
 
-createTableSchema(pagesize::Integer) = return TableSchema(pagesize, Vector{ColumnSchema}(0), Dict{AbstractString, (ColumnSchema, Integer)}([]))
+TableSchema(pagesize::Integer) = return TableSchema(pagesize, Vector{ColumnSchema}(0), Dict{AbstractString, (ColumnSchema, Integer)}([]))
 
 # add a column to the table-schema (append the new column)
 function addColumn!{T}(tableschema::TableSchema, column::ColumnSchema{T})
@@ -92,18 +92,6 @@ function isequal(col1::ColumnSchema, col2::ColumnSchema)
   return isequal(col1.name, col2.name) && isequal(col1.dataType, col2.dataType)
 end
 
-# Pages
-abstract CacheableData
-
-type TablePage <: CacheableData
-  id::Integer
-  size::Integer
-  modified::Bool
-  expired::Bool
-  buffer::IOBuffer
-  schema::TableSchema
-end
-
 # Tuples
 type DataTuple
   fields::Vector{DataField}
@@ -111,8 +99,8 @@ type DataTuple
 end
 
 # constructors for datatuples
-datatuple(values::Vector{DataField}) = return DataTuple(copy(values), length(values))
-datatuple(numFields::Integer) = return DataTuple(Vector{DataField}(numFields), numFields)
+DataTuple(values::Vector{DataField}) = return DataTuple(copy(values), length(values))
+DataTuple(numFields::Integer) = return DataTuple(Vector{DataField}(numFields), numFields)
 
 # getters and setters for fields in a tuple
 getField(tuple::DataTuple, pos::Integer) = return tuple.fields[pos]
@@ -122,6 +110,53 @@ setField!(tuple::DataTuple, field::DataField, pos::Integer) = tuple.fields[pos] 
 ######################################################################################
 # TablePage functionalities
 ######################################################################################
+# constants
+const HEADERSIZE = 32
+const RECORD_HEADERSIZE = 4
+# header
+const MAGIC_NUMBER = 0xDEADBEEF
+const PAGENUMBER_OFFSET = 4
+const NR_RECORDS_OFFSET = 8
+const RECORD_WIDTH_OFFSET = 12
+const VAR_LENGTH_OFFSET = 16
+# tombstones
+const TOMBSTONE_DEAD = 0x0
+const TOMBSTONE_ALIVE = 0x1
+
+# Pages
+abstract CacheableData
+
+type TablePage <: CacheableData
+  id::Integer
+  size::Integer
+  modified::Bool
+  expired::Bool
+  binaryPage::IOBuffer
+  schema::TableSchema
+end
+
+# create a new page
+function TablePage(binaryPage::Vector{UInt8}, schema::TableSchema, pageNumber::Int32)
+  # wrap binary page
+  buffer = IOBuffer(binaryPage, true, true, schema.size)
+  # initialize header
+  seekstart(buffer)
+  # magic number to identify pages of the db
+  write(buffer, MAGIC_NUMBER)
+  # pagenumber
+  write(buffer, pageNumber)
+  # number of records on page
+  write(buffer, Int32(0))
+  # get width of a record
+  width = mapfoldl(x -> sizeof(x.dataType), +, 0, schema.columns)
+  write(buffer, width)
+  # variable length offset
+  write(buffer, buffer.maxsize)
+end
+
+# load an existing page from a buffer
+function TablePage(binaryPage::Vector{UInt8}, schema::TableSchema)
+end
 
 # insert a tuple
 function insertTuple(page::TablePage, tuple::DataTuple)

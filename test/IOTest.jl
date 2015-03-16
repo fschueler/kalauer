@@ -22,7 +22,7 @@ IO.setField!(tuple1, fields[1], 2)
 # @test IO.getField(tuple2, 1).value == 10
 
 fields = [IO.BigIntField(10), IO.SmallIntField(3), IO.IntField(4), IO.rid(Int32(10), Int32(2))]
-tuple3 = IO.datatuple(fields) # this should work
+tuple3 = IO.DataTuple(fields) # this should work
 
 @test IO.getField(tuple3, 1).value == 10
 
@@ -35,9 +35,9 @@ pagesize = 4096
 buffer = IOBuffer(pagesize)
 
 # schemas
-tableschema = IO.createTableSchema(pagesize)
-col1schema = IO.createColumnSchema("age", IO.SmallIntType)
-col2schema = IO.createColumnSchema("salary", IO.BigIntType)
+tableschema = IO.TableSchema(pagesize)
+col1schema = IO.ColumnSchema("age", IO.SmallIntType)
+col2schema = IO.ColumnSchema("salary", IO.BigIntType)
 IO.addColumn!(tableschema, col1schema)
 IO.addColumn!(tableschema, col2schema)
 
